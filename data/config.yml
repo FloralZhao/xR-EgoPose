@@ -1,0 +1,35 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# config file
+
+dataset:
+  train: /net/vision29/data/i/dongxu/xR-EgoPose/data/Dataset/TrainSet
+  val: /net/vision29/data/i/dongxu/xR-EgoPose/data/Dataset/ValSet
+  test: /net/vision29/data/i/dongxu/xR-EgoPose/data/Dataset/TestSet
+
+CUDNN:
+  BENCHMARK: True
+  DETERMINISTIC: False
+  ENABLED: True
+
+transforms:
+  norm: Neck
+
+data_loader:
+  batch_size: 16
+  shuffle: True
+
+
+model:
+  BN_MOMENTUM: 0.1
+
+data:
+  image_size_ori: [800, 1280, 3]
+  image_size: [368, 368, 3]
+  heatmap_size: [48, 48]
+
+train:
+  PRINT_FREQ: 100
+  learning_rate: 0.001
+
+
+
