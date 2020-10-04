@@ -40,6 +40,7 @@ def main():
     LOGGER = ConsoleLogger('Finetune', 'train')
     logdir = LOGGER.getLogFolder()
     LOGGER.info(args)
+    LOGGER.info(config)
 
 
     cudnn.benckmark = config.CUDNN.BENCHMARK
@@ -93,7 +94,7 @@ def main():
 
     # ------------------- optimizer -------------------
     optimizer = optim.Adam(itertools.chain(resnet.parameters(), autoencoder.parameters()), lr=config.train.learning_rate)
-
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.train.step_size, gamma=0.1)
 
     # ------------------- load model -------------------
     if args.load_model:
@@ -103,6 +104,7 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         resnet.load_state_dict(checkpoint['resnet_state_dict'])
         autoencoder.load_state_dict(checkpoint['autoencoder_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
 
     if args.load_2d_model:
         if not os.path.isfile(args.load_2d_model):
@@ -115,6 +117,7 @@ def main():
             raise ValueError(f"No checkpoint found at {args.load_3d_model}")
         checkpoint = torch.load(args.load_3d_model)
         resnet.load_state_dict(checkpoint['resnet_state_dict'])
+
 
 
     # ------------------- tensorboard -------------------
@@ -160,7 +163,7 @@ def main():
                 loss_cos = loss_cos.mean()
                 loss_len = loss_len.mean()
 
-                loss = 0.1 * loss2d + 0.001 * loss_recon + 0.1 * loss_3d -0.01 * loss_cos + 0.5 * loss_len.mean()
+                loss = args.lambda_2d * loss2d + args.lambda_recon * loss_recon + args.lambda_3d * loss_3d - args.lambda_cos * loss_cos + args.lambda_len * loss_len
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -182,6 +185,8 @@ def main():
 
                     writer = writer_dict['writer']
                     global_steps = writer_dict['train_global_steps']
+                    lr = [group['lr'] for group in scheduler.optimizer.param_groups]
+                    writer.add_scalar('learning_rate', lr, global_steps)
                     writer.add_scalar('train_loss', losses.val, global_steps)
                     writer.add_scalar('batch_time', batch_time.val, global_steps)
                     writer.add_scalar('losses/loss_recon', loss_recon, global_steps)
@@ -203,6 +208,7 @@ def main():
                     eval_lower.eval(y_output, y_target, action)
 
                 end = time.time()
+            scheduler.step()
 
             # ------------------- Save results -------------------
             checkpoint_dir = os.path.join(logdir, 'checkpoints')
@@ -213,6 +219,7 @@ def main():
             states['resnet_state_dict'] = resnet.state_dict()
             states['autoencoder_state_dict'] = autoencoder.state_dict()
             states['optimizer_state_dict']= optimizer.state_dict()
+            states['scheduler'] = scheduler.state_dict()
 
             torch.save(states, os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'))
 

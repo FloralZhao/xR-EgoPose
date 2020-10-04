@@ -40,6 +40,7 @@ def main():
     LOGGER = ConsoleLogger('Train2d', 'train')
     logdir = LOGGER.getLogFolder()
     LOGGER.info(args)
+    LOGGER.info(config)
 
 
     cudnn.benckmark = config.CUDNN.BENCHMARK
@@ -85,6 +86,7 @@ def main():
 
     # ------------------- optimizer -------------------
     optimizer = optim.Adam(resnet.parameters(), lr=config.train.learning_rate)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.train.step_size, gamma=0.1)
 
 
     # ------------------- load model -------------------
@@ -94,6 +96,7 @@ def main():
         checkpoint = torch.load(args.load_model)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         resnet.load_state_dict(checkpoint['resnet_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
 
 
     # ------------------- tensorboard -------------------
@@ -151,6 +154,8 @@ def main():
 
                     writer = writer_dict['writer']
                     global_steps = writer_dict['train_global_steps']
+                    lr = [group['lr'] for group in scheduler.optimizer.param_groups]
+                    writer.add_scalar('learning_rate', lr, global_steps)
                     writer.add_scalar('train_loss', losses.val, global_steps)
                     writer.add_scalar('batch_time', batch_time.val, global_steps)
                     image_grid = draw2Dpred_and_gt(img, heatmap2d_hat)
@@ -159,7 +164,7 @@ def main():
 
 
                 end = time.time()
-
+            scheduler.step()
             # ------------------- Save results -------------------
             checkpoint_dir = os.path.join(logdir, 'checkpoints')
             if not os.path.exists(checkpoint_dir):
@@ -168,6 +173,7 @@ def main():
             states = dict()
             states['resnet_state_dict'] = resnet.state_dict()
             states['optimizer_state_dict']= optimizer.state_dict()
+            states['scheduler']= scheduler.state_dict()
             torch.save(states, os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'))
 
             # ------------------- validation -------------------
