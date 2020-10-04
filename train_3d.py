@@ -95,7 +95,7 @@ def main():
         if not os.path.isfile(args.load_model):
             raise FileNotFoundError(f"No checkpoint found at {args.load_model}")
         checkpoint = torch.load(args.load_model)
-        optimizer.load_state_dict(checkpoint['optimizer'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         autoencoder.load_state_dict(checkpoint['autoencoder_state_dict'])
 
 
@@ -189,7 +189,7 @@ def main():
             LOGGER.info('=> saving checkpoint to {}'.format(checkpoint_dir))
             states = dict()
             states['autoencoder_state_dict'] = autoencoder.state_dict()
-            states['optimizer_state_dict']: optimizer.state_dict()
+            states['optimizer_state_dict']= optimizer.state_dict()
 
             torch.save(states, os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'))
 

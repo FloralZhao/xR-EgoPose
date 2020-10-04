@@ -102,7 +102,7 @@ def main():
         if not os.path.isfile(args.load_model):
             raise ValueError(f"No checkpoint found at {args.load_model}")
         checkpoint = torch.load(args.load_model)
-        optimizer.load_state_dict(checkpoint['optimizer'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if args.training_type != 'Train3d':
             resnet.load_state_dict(checkpoint['resnet_state_dict'])
         if args.training_type != 'Train2d':
@@ -146,7 +146,7 @@ def main():
                 if args.training_type != 'Train3d':
                     heatmap2d_hat = resnet(img)  # torch.Size([16, 15, 48, 48])
                 else:
-                    heatmap2d_hat =
+                    heatmap2d_hat = heatmap
                 p3d_hat, heatmap2d_recon = autoencoder(heatmap2d_hat)
 
                 loss2d = Loss2D(heatmap, heatmap2d_hat).mean()
@@ -199,7 +199,7 @@ def main():
                 states['resnet_state_dict'] = resnet.state_dict()
             if args.training_type!='Train2d':
                 states['autoencoder_state_dict'] = autoencoder.state_dict()
-            states['optimizer_state_dict']: optimizer.state_dict()
+            states['optimizer_state_dict']= optimizer.state_dict()
 
             torch.save(states, f'checkpoint_{epoch}.tar')
             res = {'FullBody': eval_body.get_results(),
