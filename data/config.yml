@@ -15,7 +15,6 @@ transforms:
   norm: Neck
 
 data_loader:
-  batch_size: 16
   shuffle: True
 
 
@@ -29,8 +28,6 @@ data:
 
 train:
   PRINT_FREQ: 100
-  learning_rate: 0.0003
-  step_size: 10
 
 
 

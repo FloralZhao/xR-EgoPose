@@ -91,12 +91,12 @@ def main():
 
     # ------------------- optimizer -------------------
     if args.training_type == 'Train2d':
-        optimizer = optim.Adam(resnet.parameters(), lr=config.train.learning_rate)
+        optimizer = optim.Adam(resnet.parameters(), lr=args.learning_rate)
     if args.training_type == 'Train3d':
         optimizer = optim.Adam(autoencoder.parameters(), lr=config.train.learning_rate)
     if args.training_type != 'Finetune':
         optimizer = optim.Adam(itertools.chain(resnet.parameters(), autoencoder.parameters()), lr=config.train.learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.train.step_size, gamma=0.1)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
 
     # ------------------- load model -------------------
     if args.load_model:

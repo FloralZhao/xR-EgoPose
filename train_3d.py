@@ -75,7 +75,7 @@ def main():
 
     # ------------------- Model -------------------
     #TODO: add other losses
-    autoencoder = encoder_decoder.AutoEncoder()
+    autoencoder = encoder_decoder.AutoEncoder(args.batch_norm, args.decoder_activation)
     LossHeatmapRecon = HeatmapLoss()
     Loss3D = nn.MSELoss()
     LossLimb = LimbLoss()
@@ -88,8 +88,11 @@ def main():
         LossLimb.cuda(device)
 
     # ------------------- optimizer -------------------
-    optimizer = optim.Adam(autoencoder.parameters(), lr=config.train.learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.train.step_size, gamma=0.1)
+    if args.optimizer == 'adam':
+        optimizer = optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
+    elif args.optimizer == 'sgd':
+        optimizer = optim.SGD(autoencoder.parameters(), lr=args.learning_rate)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
 
 
     # ------------------- load model -------------------
@@ -218,6 +221,8 @@ def main():
             if best_model:
                 shutil.copyfile(os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'), os.path.join(checkpoint_dir, f'model_best.tar'))
                 best_model = False
+
+    LOGGER.info('Done.')
 
 
 

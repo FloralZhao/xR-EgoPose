@@ -85,7 +85,7 @@ def colorize(gray_img):
     return out
 
 
-def draw2Dpred_and_gt(img, heatmaps):
+def draw2Dpred_and_gt(img, heatmaps, output_size=(48,48)):
     '''
     Args:
         img: (16, 3, 368, 368), torch.Tensor
@@ -99,13 +99,14 @@ def draw2Dpred_and_gt(img, heatmaps):
     img = img[0]  # (3, 368, 368) torch.Tensor
     img = img.cpu().numpy().transpose(1,2,0)  # (368, 368, 3) numpy.array, float32
     img = img * 0.5 + 0.5
-    img = resize(img, (heatmaps.size(2), heatmaps.size(3)), anti_aliasing=True)  # (48, 48, 3) float64
+    img = resize(img, output_size, anti_aliasing=True)  # (48, 48, 3) float64
     heatmap = heatmaps[0].detach().cpu().numpy()  # (15, 48, 48)
-    image_to_show = torch.rand(heatmap.shape[0], 3, heatmap.shape[1], heatmap.shape[2])
+    image_to_show = torch.rand(heatmap.shape[0], 3, output_size[0], output_size[1])
     img *= 255
     img.astype(np.uint8)
     for i in range(heatmap.shape[0]):
-        image_to_show[i] = torch.from_numpy(colorize(heatmap[i]).transpose((2,0,1))) * 0.5 + torch.from_numpy(img.transpose((2, 0, 1))) * 0.5
+        ht = resize(heatmap[i], output_size)
+        image_to_show[i] = torch.from_numpy(colorize(ht).transpose((2,0,1))) * 0.5 + torch.from_numpy(img.transpose((2, 0, 1))) * 0.5
 
     img_grid = torchvision.utils.make_grid(image_to_show, nrow=4).to(torch.uint8)
     return img_grid

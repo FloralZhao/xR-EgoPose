@@ -85,8 +85,8 @@ def main():
         Loss2D = Loss2D.cuda(device)
 
     # ------------------- optimizer -------------------
-    optimizer = optim.Adam(resnet.parameters(), lr=config.train.learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.train.step_size, gamma=0.1)
+    optimizer = optim.Adam(resnet.parameters(), lr=args.learning_rate)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
 
 
     # ------------------- load model -------------------
@@ -187,7 +187,7 @@ def main():
                 shutil.copyfile(os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'), os.path.join(checkpoint_dir, f'model_best.tar'))
                 best_model = False
 
-
+    LOGGER.info('Done.')
 
 
 if __name__ == "__main__":

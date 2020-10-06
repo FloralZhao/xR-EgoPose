@@ -4,8 +4,10 @@ from utils import config
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, pretrained=None):
+    def __init__(self, bn=False, act_decoder=False):
         super().__init__()
+        self.bn = bn
+        self.act_decoder = act_decoder
         self.conv1 = nn.Conv2d(len(config.skel)-1, 64, kernel_size=4, stride=2, padding=1)
         self.bn1 = nn.BatchNorm2d(64)
         self.leaky_relu1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
@@ -67,28 +69,54 @@ class AutoEncoder(nn.Module):
 
 
     def forward(self, x):
-        z = self.leaky_relu1(self.bn1(self.conv1(x)))
-        z = self.leaky_relu2(self.bn2(self.conv2(z)))
-        z = self.leaky_relu3(self.bn3(self.conv3(z)))
+
+        # encoder
+        if self.bn:
+            z = self.leaky_relu1(self.bn1(self.conv1(x)))
+            z = self.leaky_relu2(self.bn2(self.conv2(z)))
+            z = self.leaky_relu3(self.bn3(self.conv3(z)))
+        else:
+            z = self.leaky_relu1(self.conv1(x))
+            z = self.leaky_relu2(self.conv2(z))
+            z = self.leaky_relu3(self.conv3(z))
         z = z.view(-1, 18432)
 
         z = self.leaky_relu4(self.fc1(z))
         z = self.leaky_relu5(self.fc2(z))
         z = self.leaky_relu6(self.fc3(z))
 
-        pose_3d = self.b1_leaky_relu1(self.b1_fc1(z))
-        pose_3d = self.b1_leaky_relu2(self.b1_fc2(pose_3d))
-        # pose_3d = self.b1_leaky_relu3(self.b1_fc3(pose_3d))
-        pose_3d = self.b1_fc3(pose_3d)
-        pose_3d = pose_3d.view(-1, 16, 3)
+        if self.act_decoder:
+            # decoder--branch 1
+            pose_3d = self.b1_leaky_relu1(self.b1_fc1(z))
+            pose_3d = self.b1_leaky_relu2(self.b1_fc2(pose_3d))
+            # pose_3d = self.b1_leaky_relu3(self.b1_fc3(pose_3d))
+            pose_3d = self.b1_fc3(pose_3d)
+            pose_3d = pose_3d.view(-1, 16, 3)
 
-        heatmap = self.b2_leaky_relu1(self.b2_fc1(z))
-        heatmap = self.b2_leaky_relu2(self.b2_fc2(heatmap))
-        heatmap = self.b2_leaky_relu3(self.b2_fc3(heatmap))
-        heatmap = heatmap.view(-1, 512, 6, 6)
-        heatmap = self.b2_leaky_relu4(self.b2_deconv1(heatmap))
-        heatmap = self.b2_leaky_relu5(self.b2_deconv2(heatmap))
-        heatmap = self.b2_leaky_relu6(self.b2_deconv3(heatmap))
+            # decoder--branch 2
+            heatmap = self.b2_leaky_relu1(self.b2_fc1(z))
+            heatmap = self.b2_leaky_relu2(self.b2_fc2(heatmap))
+            heatmap = self.b2_leaky_relu3(self.b2_fc3(heatmap))
+            heatmap = heatmap.view(-1, 512, 6, 6)
+            heatmap = self.b2_leaky_relu4(self.b2_deconv1(heatmap))
+            heatmap = self.b2_leaky_relu5(self.b2_deconv2(heatmap))
+            heatmap = self.b2_leaky_relu6(self.b2_deconv3(heatmap))
+        else:
+            # decoder--branch 1
+            pose_3d = self.b1_fc1(z)
+            pose_3d = self.b1_fc2(pose_3d)
+            # pose_3d = self.b1_leaky_relu3(self.b1_fc3(pose_3d))
+            pose_3d = self.b1_fc3(pose_3d)
+            pose_3d = pose_3d.view(-1, 16, 3)
+
+            # decoder--branch 2
+            heatmap = self.b2_leaky_relu1(self.b2_fc1(z))
+            heatmap = self.b2_leaky_relu2(self.b2_fc2(heatmap))
+            heatmap = self.b2_leaky_relu3(self.b2_fc3(heatmap))
+            heatmap = heatmap.view(-1, 512, 6, 6)
+            heatmap = self.b2_leaky_relu4(self.b2_deconv1(heatmap))
+            heatmap = self.b2_leaky_relu5(self.b2_deconv2(heatmap))
+            heatmap = self.b2_leaky_relu6(self.b2_deconv3(heatmap))
 
         return pose_3d, heatmap
 

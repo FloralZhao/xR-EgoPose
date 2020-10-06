@@ -8,7 +8,10 @@ def parse_args():
     parser.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='initial learning rate')
     parser.add_argument('-opt', '--optimizer', default='adam', type=str, help='optimizer')
     parser.add_argument('--gpu', default='0', type=str)
-    parser.add_argument('--training_type', default='finetune', type=str) # 'Finetune', 'Train2d', 'Train3d'
+    parser.add_argument('--training_type', default='finetune', type=str) # 'Finetune', 'Train2d', 'Train3d', 'Demo'
+    parser.add_argument('--step_size', default=10, help='step size for StepLR scheduler', type=int)
+    parser.add_argument('--batch_norm', default=False, help='whether use batch normalization or not in autoencoder', type=bool)
+    parser.add_argument('--decoder_activation', default=True, help='whether use activation in decoder branch 1', type=bool)
 
     # ================= load model ======================
     parser.add_argument('--load_model', help='the path of the checkpoint to load', type=str)  # default is None

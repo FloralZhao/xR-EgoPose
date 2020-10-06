@@ -18,7 +18,13 @@ import argparse
 import os
 from model import pose_resnet, encoder_decoder
 
-import pdb
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.gridspec as gridspec
+from utils.vis3d import show3Dpose
+import matplotlib.pyplot as plt
+# This import registers the 3D projection, but is otherwise unused.
+from mpl_toolkits.mplot3d import Axes3D
 
 LOGGER = ConsoleLogger("Demo", 'test')
 
@@ -26,6 +32,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Training script")
     parser.add_argument('--gpu', default='0', type=str)
     parser.add_argument('--load_model', type=str)
+    parser.add_argument('--data', default='test', type=str) # "train", "val", "test"
     args = parser.parse_args()
 
     return args
@@ -34,7 +41,7 @@ def parse_args():
 def main():
     """Main"""
     args = parse_args()
-    LOGGER.info('Starting demo...')
+    print('Starting demo...')
     device = torch.device(f"cuda:{args.gpu}")
 
     # ------------------- Data loader -------------------
@@ -45,13 +52,15 @@ def main():
         trsf.ToTensor()])  # to tensor
 
     data = Mocap(
-        config.dataset.test,
+        # config.dataset.test,
+        config.dataset[args.data],
         SetType.TEST,
         transform=data_transform)
     data_loader = DataLoader(
         data,
-        batch_size=config.data_loader.batch_size,
-        shuffle=config.data_loader.shuffle)
+        batch_size=2,
+        shuffle=config.data_loader.shuffle,
+        num_workers=8)
 
     # ------------------- Evaluation -------------------
 
@@ -70,15 +79,23 @@ def main():
     autoencoder.cuda(device)
     autoencoder.eval()
 
+
+    # ------------------- Read dataset frames -------------------
+    fig = plt.figure(figsize=(19.2, 10.8))
+    # gs1 = gridspec.GridSpec(4, 8)  # 4 rows, 8 columns
+    # gs1.update(wspace=-0.00, hspace=0.05)  # set the spacing between axes.
+    plt.axis('off')
+    subplot_idx = 1
+
     # ------------------- Read dataset frames -------------------
     with torch.no_grad():
         for it, (img, p2d, p3d, heatmap, action) in enumerate(data_loader):
 
-            LOGGER.info('Iteration: {}'.format(it))
-            LOGGER.info('Images: {}'.format(img.shape))
-            LOGGER.info('p2ds: {}'.format(p2d.shape))
-            LOGGER.info('p3ds: {}'.format(p3d.shape))
-            LOGGER.info('Actions: {}'.format(action))
+            print('Iteration: {}'.format(it))
+            print('Images: {}'.format(img.shape))
+            print('p2ds: {}'.format(p2d.shape))
+            print('p3ds: {}'.format(p3d.shape))
+            print('Actions: {}'.format(action))
 
             p3d = p3d.to(device)
             heatmap = heatmap.to(device)
@@ -93,6 +110,19 @@ def main():
             eval_upper.eval(y_output, y_target, action)
             eval_lower.eval(y_output, y_target, action)
 
+            if it%1000==0 and subplot_idx <= 32:
+                # ax1 = plt.subplot(gs1[subplot_idx - 1], projection='3d')
+                ax1 = fig.add_subplot(4, 8, subplot_idx, projection='3d')
+                show3Dpose(p3d[0].cpu().numpy(), ax1, True)
+
+                # Plot 3d gt
+                # ax2 = plt.subplot(gs1[subplot_idx], projection='3d')
+                ax2 = fig.add_subplot(4, 8, subplot_idx+1, projection='3d')
+                show3Dpose(p3d_hat[0].detach().cpu().numpy(), ax2, False)
+
+                subplot_idx += 2
+            if subplot_idx == 34:
+                plt.savefig(os.path.join(LOGGER.logfile_dir, 'vis.png'))
 
     # ------------------- Save results -------------------
 
@@ -103,7 +133,7 @@ def main():
 
     LOGGER.info(res)
 
-    LOGGER.info('Done.')
+    print('Done.')
 
 
 if __name__ == "__main__":
