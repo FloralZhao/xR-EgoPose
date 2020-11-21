@@ -12,7 +12,7 @@ from skimage import io as sio
 import numpy as np
 from base import BaseDataset
 from utils import utils_io, config
-from utils.joint2heatmap import joint2heatmeap
+from utils.joint2heatmap import joint2heatmap
 
 
 class Mocap(BaseDataset):
@@ -83,7 +83,7 @@ class Mocap(BaseDataset):
             data {dict} -- data dictionary with frame info
 
         Returns:
-            np.ndarray -- 2D joint positions, format (J x 2)
+            np.ndarray -- 2D joint positƒions, format (J x 2)
             np.ndarray -- 3D joint positions, format (J x 3)
         """
 
@@ -120,7 +120,13 @@ class Mocap(BaseDataset):
         data = utils_io.read_json(json_path)
         p2d, p3d = self._process_points(data)
 
-        heatmap, _ = joint2heatmeap(p2d)
+        # p2d rescale according to img
+        start = 240
+        p2d[:, 0] -= start  # x-axis
+        p2d[:, 0] /= (800 / config.data.image_size[1])
+        p2d[:, 1] /= (800 / config.data.image_size[0])
+
+        heatmap, _ = joint2heatmap(p2d)
 
         # get action name
         action = data['action']

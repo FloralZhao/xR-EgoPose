@@ -9,7 +9,7 @@ Base eval class
 import re
 from abc import ABC, abstractmethod
 import numpy as np
-from utils import ConsoleLogger, config
+from utils import config
 
 
 class BaseEval(ABC):

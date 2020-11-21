@@ -22,8 +22,8 @@ model:
   BN_MOMENTUM: 0.1
 
 data:
-  image_size_ori: [800, 1280, 3]
-  image_size: [368, 368, 3]
+  image_size_ori: [800, 1280]
+  image_size: [368, 368]
   heatmap_size: [48, 48]
 
 train:

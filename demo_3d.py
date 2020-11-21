@@ -16,7 +16,11 @@ from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
 import argparse
 import os
-from model import pose_resnet, encoder_decoder
+from model import encoder_decoder
+from utils.vis2d import draw2Dpred_and_gt, save_batch_heatmaps
+import cv2
+import pdb
+import pprint
 
 import matplotlib
 matplotlib.use('Agg')
@@ -29,7 +33,7 @@ from mpl_toolkits.mplot3d import Axes3D
 LOGGER = ConsoleLogger("Demo", 'test')
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Training script")
+    parser = argparse.ArgumentParser(description="demo script")
     parser.add_argument('--gpu', default='0', type=str)
     parser.add_argument('--load_model', type=str)
     parser.add_argument('--data', default='test', type=str) # "train", "val", "test"
@@ -43,6 +47,7 @@ def main():
     args = parse_args()
     print('Starting demo...')
     device = torch.device(f"cuda:{args.gpu}")
+    LOGGER.info((args))
 
     # ------------------- Data loader -------------------
 
@@ -58,7 +63,7 @@ def main():
         transform=data_transform)
     data_loader = DataLoader(
         data,
-        batch_size=2,
+        batch_size=16,
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
@@ -70,20 +75,21 @@ def main():
 
     # ------------------- Model -------------------
     autoencoder = encoder_decoder.AutoEncoder()
+
     if args.load_model:
         if not os.path.isfile(args.load_model):
             raise ValueError(f"No checkpoint found at {args.load_model}")
         checkpoint = torch.load(args.load_model, map_location=device)
         autoencoder.load_state_dict(checkpoint['autoencoder_state_dict'])
 
+    else:
+        raise ValueError("No checkpoint!")
     autoencoder.cuda(device)
     autoencoder.eval()
 
 
     # ------------------- Read dataset frames -------------------
     fig = plt.figure(figsize=(19.2, 10.8))
-    # gs1 = gridspec.GridSpec(4, 8)  # 4 rows, 8 columns
-    # gs1.update(wspace=-0.00, hspace=0.05)  # set the spacing between axes.
     plt.axis('off')
     subplot_idx = 1
 
@@ -100,7 +106,7 @@ def main():
             p3d = p3d.to(device)
             heatmap = heatmap.to(device)
 
-            p3d_hat, _ = autoencoder(heatmap)
+            p3d_hat, heatmap_hat = autoencoder(heatmap)
 
             # Evaluate results using different evaluation metrices
             y_output = p3d_hat.data.cpu().numpy()
@@ -110,7 +116,8 @@ def main():
             eval_upper.eval(y_output, y_target, action)
             eval_lower.eval(y_output, y_target, action)
 
-            if it%1000==0 and subplot_idx <= 32:
+            # ------------------- Visualize 3D pose -------------------
+            if subplot_idx <= 32:
                 # ax1 = plt.subplot(gs1[subplot_idx - 1], projection='3d')
                 ax1 = fig.add_subplot(4, 8, subplot_idx, projection='3d')
                 show3Dpose(p3d[0].cpu().numpy(), ax1, True)
@@ -121,8 +128,21 @@ def main():
                 show3Dpose(p3d_hat[0].detach().cpu().numpy(), ax2, False)
 
                 subplot_idx += 2
-            if subplot_idx == 34:
+            if subplot_idx == 33:
                 plt.savefig(os.path.join(LOGGER.logfile_dir, 'vis.png'))
+
+            # ------------------- Visualize 2D heatmap -------------------
+            if it < 32:
+                img_grid = draw2Dpred_and_gt(img, heatmap, (368,368))  # tensor
+                img_grid_hat = draw2Dpred_and_gt(img, heatmap_hat, (368,368), p2d)  # tensor
+                img_grid = img_grid.numpy().transpose(1,2,0)
+                img_grid_hat = img_grid_hat.numpy().transpose(1,2,0)
+                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'gt_{it}.jpg'), img_grid)
+                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'pred_{it}.jpg'), img_grid_hat)
+
+                # save_batch_heatmaps(img[0:1], heatmap_hat[0:1], os.path.join(LOGGER.logfile_dir,"pred_combine.jpg"))
+                # save_batch_heatmaps(img[0:1], heatmap[0:1], os.path.join(LOGGER.logfile_dir, "gt_combine.jpg"))
+
 
     # ------------------- Save results -------------------
 
@@ -131,7 +151,7 @@ def main():
            'UpperBody': eval_upper.get_results(),
            'LowerBody': eval_lower.get_results()}
 
-    LOGGER.info(res)
+    LOGGER.info(pprint.pformat(res))
 
     print('Done.')
 

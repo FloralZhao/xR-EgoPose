@@ -18,10 +18,11 @@ from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
 from utils import arguments
 import torch.optim as optim
-from model import pose_resnet, encoder_decoder
+from model import resnet as pose_resnet
+from model import encoder_decoder
 import itertools
 import torch.nn as nn
-from utils.loss import HeatmapLoss, LimbLoss
+from utils.loss import HeatmapLoss, LimbLoss, PoseLoss, HeatmapLossSquare
 import pprint
 import os
 from tensorboardX import SummaryWriter
@@ -30,6 +31,8 @@ import time
 from validation_finetune import validate
 import shutil
 from utils.vis2d import draw2Dpred_and_gt
+from easydict import EasyDict as edict
+import yaml
 
 import pdb
 
@@ -64,23 +67,37 @@ def main():
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
-    val_data = Mocap(
-        config.dataset.val,
-        SetType.VAL,
+    # val_data = Mocap(
+    #     config.dataset.val,
+    #     SetType.VAL,
+    #     transform=data_transform)
+    # val_data_loader = DataLoader(
+    #     val_data,
+    #     batch_size=2,
+    #     shuffle=config.data_loader.shuffle,
+    #     num_workers=8)
+
+    test_data = Mocap(
+        config.dataset.test,
+        SetType.TEST,
         transform=data_transform)
-    val_data_loader = DataLoader(
-        val_data,
+    test_data_loader = DataLoader(
+        test_data,
         batch_size=2,
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
+
     # ------------------- Model -------------------
-    resnet = pose_resnet.get_pose_net(True)
+    with open('model/model.yaml') as fin:
+        model_cfg = edict(yaml.safe_load(fin))
+    resnet = pose_resnet.get_pose_net(model_cfg, True)
     Loss2D = HeatmapLoss()  # same as MSELoss()
-    # LossMSE = nn.MSELoss()
-    autoencoder = encoder_decoder.AutoEncoder(args.batch_norm, args.decoder_activation)
-    LossHeatmapRecon = HeatmapLoss()
-    Loss3D = nn.MSELoss()
+    autoencoder = encoder_decoder.AutoEncoder(args.batch_norm, args.denis_activation)
+    # LossHeatmapRecon = HeatmapLoss()
+    LossHeatmapRecon = HeatmapLossSquare()
+    # Loss3D = nn.MSELoss()
+    Loss3D = PoseLoss()
     LossLimb = LimbLoss()
 
     if torch.cuda.is_available():
@@ -93,8 +110,12 @@ def main():
         LossLimb.cuda(device)
 
     # ------------------- optimizer -------------------
-    optimizer = optim.Adam(itertools.chain(resnet.parameters(), autoencoder.parameters()), lr=args.learning_rate)
+    if args.freeze_2d_model:
+        optimizer = optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
+    else:
+        optimizer = optim.Adam(itertools.chain(resnet.parameters(), autoencoder.parameters()), lr=args.learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 
     # ------------------- load model -------------------
     if args.load_model:
@@ -109,14 +130,14 @@ def main():
     if args.load_2d_model:
         if not os.path.isfile(args.load_2d_model):
             raise ValueError(f"No checkpoint found at {args.load_2d_model}")
-        checkpoint = torch.load(args.load_2d_model)
+        checkpoint = torch.load(args.load_2d_model, map_location=device)
         resnet.load_state_dict(checkpoint['resnet_state_dict'])
 
     if args.load_3d_model:
         if not os.path.isfile(args.load_3d_model):
             raise ValueError(f"No checkpoint found at {args.load_3d_model}")
-        checkpoint = torch.load(args.load_3d_model)
-        resnet.load_state_dict(checkpoint['resnet_state_dict'])
+        checkpoint = torch.load(args.load_3d_model, map_location=device)
+        autoencoder.load_state_dict(checkpoint['autoencoder_state_dict'])
 
 
 
@@ -148,7 +169,6 @@ def main():
             for it, (img, p2d, p3d, heatmap, action) in enumerate(train_data_loader, 0):
 
                 img = img.to(device)
-                p2d = p2d.to(device)
                 p3d = p3d.to(device)
                 heatmap = heatmap.to(device)
 
@@ -156,9 +176,8 @@ def main():
                 p3d_hat, heatmap2d_recon = autoencoder(heatmap2d_hat)
 
                 loss2d = Loss2D(heatmap2d_hat, heatmap).mean()
-                # loss2d = LossMSE(heatmap, heatmap2d_hat)
                 loss_recon = LossHeatmapRecon(heatmap2d_recon, heatmap2d_hat).mean()
-                loss_3d = Loss3D(p3d_hat, p3d)
+                loss_3d = Loss3D(p3d_hat, p3d).mean()
                 loss_cos, loss_len = LossLimb(p3d_hat, p3d)
                 loss_cos = loss_cos.mean()
                 loss_len = loss_len.mean()
@@ -189,12 +208,15 @@ def main():
                     writer.add_scalar('learning_rate', lr, global_steps)
                     writer.add_scalar('train_loss', losses.val, global_steps)
                     writer.add_scalar('batch_time', batch_time.val, global_steps)
+                    writer.add_scalar('losses/loss_2d', loss2d, global_steps)
                     writer.add_scalar('losses/loss_recon', loss_recon, global_steps)
                     writer.add_scalar('losses/loss_3d', loss_3d, global_steps)
                     writer.add_scalar('losses/loss_cos', loss_cos, global_steps)
                     writer.add_scalar('losses/loss_len', loss_len, global_steps)
-                    image_grid = draw2Dpred_and_gt(img, heatmap2d_hat)
-                    writer.add_image('predicted heatmaps', image_grid, global_steps)
+                    image_grid = draw2Dpred_and_gt(img, heatmap2d_hat, (368, 368))
+                    writer.add_image('predicted_heatmaps', image_grid, global_steps)
+                    image_grid_recon = draw2Dpred_and_gt(img, heatmap2d_recon, (368, 368))
+                    writer.add_image('reconstructed_heatmaps', image_grid_recon, global_steps)
                     writer_dict['train_global_steps'] = global_steps + 1
 
                     # ------------------- evaluation on training data -------------------
@@ -208,7 +230,7 @@ def main():
                     eval_lower.eval(y_output, y_target, action)
 
                 end = time.time()
-            scheduler.step()
+
 
             # ------------------- Save results -------------------
             checkpoint_dir = os.path.join(logdir, 'checkpoints')
@@ -227,27 +249,26 @@ def main():
                    'UpperBody': eval_upper.get_results(),
                    'LowerBody': eval_lower.get_results()}
 
-            LOGGER.info(res)
+            LOGGER.info('===========Evaluation on Train data==========')
+            LOGGER.info(pprint.pformat(res))
 
             # utils_io.write_json(config.eval.output_file, res)
 
             # ------------------- validation -------------------
             resnet.eval()
             autoencoder.eval()
-            val_loss = validate(LOGGER, val_data_loader, resnet, autoencoder, device, epoch)
+            val_loss = validate(LOGGER, test_data_loader, resnet, autoencoder, device, epoch)
             if val_loss < best_perf:
                 best_perf = val_loss
                 best_model = True
 
-
-
             if best_model:
                 shutil.copyfile(os.path.join(checkpoint_dir, f'checkpoint_{epoch}.tar'), os.path.join(checkpoint_dir, f'model_best.tar'))
                 best_model = False
+
+            # scheduler.step(val_loss)
+            scheduler.step()
     LOGGER.info('Done.')
-
-
-
 
 
 if __name__ == "__main__":

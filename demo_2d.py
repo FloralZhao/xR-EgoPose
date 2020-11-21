@@ -15,20 +15,22 @@ import dataset.transform as trsf
 from dataset import Mocap
 from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
-from model import pose_resnet, encoder_decoder
+from model import resnet as pose_resnet
 import pdb
 import os
 import argparse
 from utils.vis2d import draw2Dpred_and_gt
 import cv2
 from utils import AverageMeter
+from easydict import EasyDict as edict
+import yaml
 import numpy as np
 
 
 LOGGER = ConsoleLogger("Demo", 'test')
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Training script")
+    parser = argparse.ArgumentParser(description="demo script")
     parser.add_argument('--gpu', default='0', type=str)
     parser.add_argument('--load_model', type=str)
     parser.add_argument('--data', default='test', type=str) # "train", "val", "test"
@@ -42,6 +44,7 @@ def main():
     args = parse_args()
     LOGGER.info('Starting demo...')
     device = torch.device(f"cuda:{args.gpu}")
+    LOGGER.info(args)
 
     # ------------------- Data loader -------------------
 
@@ -62,19 +65,22 @@ def main():
         num_workers=8)
 
     # ------------------- Model -------------------
-    resnet = pose_resnet.get_pose_net(True)
+    with open('model/model.yaml') as fin:
+        model_cfg = edict(yaml.safe_load(fin))
+    resnet = pose_resnet.get_pose_net(model_cfg, False)
     resnet.cuda(device)
     if args.load_model:
         if not os.path.isfile(args.load_model):
             raise ValueError(f"No checkpoint found at {args.load_model}")
-        checkpoint = torch.load(args.load_model)
+        checkpoint = torch.load(args.load_model, map_location=device)
         resnet.load_state_dict(checkpoint['resnet_state_dict'])
+    else:
+        raise ValueError("No checkpoint!")
 
     resnet.eval()
     Loss2D = nn.MSELoss()
 
     # ------------------- Read dataset frames -------------------
-    ind = 1
     losses = AverageMeter()
     with torch.no_grad():
         for it, (img, p2d, p3d, heatmap, action) in enumerate(data_loader):
@@ -93,14 +99,14 @@ def main():
             losses.update(loss.item(), img.size(0))
 
             # ------------------- visualization -------------------
-            if ind <= 32:
+            if it < 32:
                 img_grid = draw2Dpred_and_gt(img, heatmap, (368,368))  # tensor
-                img_grid_hat = draw2Dpred_and_gt(img, heatmap_hat, (368,368))  # tensor
-                img_grid = img_grid.numpy().transpose(1,2,0)
+                img_grid = img_grid.numpy().transpose(1, 2, 0)
+                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'gt_{it}.jpg'), img_grid)
+
+                img_grid_hat = draw2Dpred_and_gt(img, heatmap_hat, (368,368), p2d.clone())  # tensor
                 img_grid_hat = img_grid_hat.numpy().transpose(1,2,0)
-                ind += 1
-                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'gt_{ind}.jpg'), img_grid)
-                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'pred_{ind}.jpg'), img_grid_hat)
+                cv2.imwrite(os.path.join(LOGGER.logfile_dir, f'pred_{it}.jpg'), img_grid_hat)
 
 
     # ------------------- Save results -------------------

@@ -18,7 +18,8 @@ from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
 from utils import arguments
 import torch.optim as optim
-from model import pose_resnet, encoder_decoder
+from model import resnet as pose_resnet
+from model import encoder_decoder
 import itertools
 import torch.nn as nn
 from utils.loss import HeatmapLoss
@@ -27,6 +28,8 @@ import os
 from tensorboardX import SummaryWriter
 from utils import AverageMeter
 import time
+from easydict import EasyDict as edict
+import yaml
 
 import pdb
 
@@ -75,7 +78,9 @@ def main():
 
     # ------------------- Model -------------------
     if args.training_type != 'Train3d':
-        resnet = pose_resnet.get_pose_net(True)
+        with open('model/model.yaml') as fin:
+            model_cfg = edict(yaml.safe_load(fin))
+        resnet = pose_resnet.get_pose_net(model_cfg, True)
         Loss2D = HeatmapLoss()  # same as MSELoss()
         # LossMSE = nn.MSELoss()
     if args.training_type != 'Train2d':

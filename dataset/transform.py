@@ -17,6 +17,18 @@ from skimage.transform import resize
 class ImageTrsf(BaseTransform):
     """Image Transform"""
 
+    # def __init__(self, mean=None, std=None):
+    #
+    #     super().__init__()
+    #     if mean is None:
+    #         self.mean = [0.485, 0.456, 0.406]
+    #     else:
+    #         self.mean = mean
+    #     if std is None:
+    #         self.std = [0.229, 0.224, 0.225]
+    #     else:
+    #         self.std = std
+
     def __init__(self, mean=0.5, std=0.5):
 
         super().__init__()
@@ -35,15 +47,14 @@ class ImageTrsf(BaseTransform):
 
         # get image from all data
         img = data['image']
-
-        img = resize(img, (368, 368), anti_aliasing=True)  # convert to scale [0, 1]
-        # channel last to channel first
-        img = np.transpose(img, [2, 0, 1])
-        # img = transforms.ToTensor()(img)
+        img = resize(img, config.data.image_size, anti_aliasing=True)  # convert to scale [0, 1]
 
         # normalization
         img -= self.mean
         img /= self.std
+
+        # channel last to channel first
+        img = np.transpose(img, [2, 0, 1])
 
         data.update({'image': img})
 

@@ -34,9 +34,7 @@ def validate(LOGGER, data_loader, resnet, autoencoder, device, epoch):
     with torch.no_grad():
         for it, (img, p2d, p3d, heatmap, action) in enumerate(data_loader):
             img = img.to(device)
-            p2d = p2d.to(device)
             p3d = p3d.to(device)
-            heatmap = heatmap.to(device)
 
             heatmap2d_hat = resnet(img)
             p3d_hat, _ = autoencoder(heatmap2d_hat)

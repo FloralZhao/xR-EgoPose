@@ -18,10 +18,10 @@ from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
 from utils import arguments
 import torch.optim as optim
-from model import pose_resnet, encoder_decoder
+from model import encoder_decoder
 import itertools
 import torch.nn as nn
-from utils.loss import HeatmapLoss, LimbLoss
+from utils.loss import HeatmapLoss, LimbLoss, PoseLoss
 import pprint
 import os
 from tensorboardX import SummaryWriter
@@ -29,6 +29,7 @@ from utils import AverageMeter
 import time
 from validation_3d import validate
 import shutil
+from utils.vis2d import draw2Dpred_and_gt
 
 import pdb
 
@@ -63,21 +64,22 @@ def main():
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
-    val_data = Mocap(
-        config.dataset.val,
-        SetType.VAL,
+    test_data = Mocap(
+        config.dataset.test,
+        SetType.TEST,
         transform=data_transform)
-    val_data_loader = DataLoader(
-        val_data,
+    test_data_loader = DataLoader(
+        test_data,
         batch_size=2,
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
     # ------------------- Model -------------------
     #TODO: add other losses
-    autoencoder = encoder_decoder.AutoEncoder(args.batch_norm, args.decoder_activation)
+    autoencoder = encoder_decoder.AutoEncoder(args.batch_norm, args.denis_activation)
     LossHeatmapRecon = HeatmapLoss()
-    Loss3D = nn.MSELoss()
+    # Loss3D = nn.MSELoss()
+    Loss3D = PoseLoss()
     LossLimb = LimbLoss()
 
     if torch.cuda.is_available():
@@ -133,13 +135,12 @@ def main():
             for it, (img, p2d, p3d, heatmap, action) in enumerate(train_data_loader, 0):
 
                 img = img.to(device)
-                p2d = p2d.to(device)
                 p3d = p3d.to(device)
                 heatmap = heatmap.to(device)
 
                 p3d_hat, heatmap2d_recon = autoencoder(heatmap)
                 loss_recon = LossHeatmapRecon(heatmap2d_recon, heatmap).mean()
-                loss_3d = Loss3D(p3d_hat, p3d)
+                loss_3d = Loss3D(p3d_hat, p3d).mean()
                 loss_cos, loss_len = LossLimb(p3d_hat, p3d)
                 loss_cos = loss_cos.mean()
                 loss_len = loss_len.mean()
@@ -175,6 +176,8 @@ def main():
                     writer.add_scalar('losses/loss_3d', loss_3d, global_steps)
                     writer.add_scalar('losses/loss_cos', loss_cos, global_steps)
                     writer.add_scalar('losses/loss_len', loss_len, global_steps)
+                    image_grid = draw2Dpred_and_gt(img, heatmap2d_recon,(368, 368))
+                    writer.add_image('predicted_heatmaps', image_grid, global_steps)
 
                     writer_dict['train_global_steps'] = global_steps + 1
 
@@ -213,7 +216,7 @@ def main():
 
             # ------------------- validation -------------------
             autoencoder.eval()
-            val_loss = validate(LOGGER, val_data_loader, autoencoder, device, epoch)
+            val_loss = validate(LOGGER, test_data_loader, autoencoder, device, epoch)
             if val_loss < best_perf:
                 best_perf = val_loss
                 best_model = True

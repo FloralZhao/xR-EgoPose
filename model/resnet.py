@@ -1,3 +1,4 @@
+
 # ------------------------------------------------------------------------------
 # Copyright (c) Microsoft
 # Licensed under the MIT License.
@@ -14,7 +15,6 @@ import logging
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from utils import config
 import torch.utils.model_zoo as model_zoo
 
 
@@ -145,10 +145,10 @@ class Bottleneck_CAFFE(nn.Module):
 
 class PoseResNet(nn.Module):
 
-    def __init__(self, block, layers, **kwargs):
+    def __init__(self, block, layers, cfg, **kwargs):
         self.inplanes = 64
-        # extra = cfg.MODEL.EXTRA
-        self.deconv_with_bias = False
+        extra = cfg.MODEL.EXTRA
+        self.deconv_with_bias = extra.DECONV_WITH_BIAS
 
         super(PoseResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
@@ -162,30 +162,19 @@ class PoseResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         # used for deconv layers
-
         self.deconv_layers = self._make_deconv_layer(
-            3,
-            [256, 256, 256],
-            [3, 3, 3],
+            extra.NUM_DECONV_LAYERS,
+            extra.NUM_DECONV_FILTERS,
+            extra.NUM_DECONV_KERNELS,
         )
-        # self.deconv_layers = self._make_deconv_layer(
-        #     2,
-        #     [256, 256],
-        #     [4, 4],
-        # )
 
         self.final_layer = nn.Conv2d(
-            in_channels=256,
-            out_channels=len(config.skel)-1,
-            kernel_size=1,
-            stride=2,  # TODO
-            padding=1 if 1 == 3 else 0
+            in_channels=extra.NUM_DECONV_FILTERS[-1],
+            out_channels=cfg.MODEL.NUM_JOINTS,
+            kernel_size=extra.FINAL_CONV_KERNEL,
+            stride=1,
+            padding=1 if extra.FINAL_CONV_KERNEL == 3 else 0
         )
-        # self.deconv_layers = self._make_deconv_layer(
-        #     1,
-        #     [len(config.skel)-1],
-        #     [3]
-        # )
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -260,43 +249,64 @@ class PoseResNet(nn.Module):
 
         return x
 
-    def init_weights(self, pretrained=True, progress=True, **kwargs):
-
-        if pretrained:
-            # init deconv_layers and final regressor weights
+    def init_weights(self, pretrained=''):
+        if os.path.isfile(pretrained):
+            logger.info('=> init deconv weights from normal distribution')
             for name, m in self.deconv_layers.named_modules():
                 if isinstance(m, nn.ConvTranspose2d):
-                    nn.init.xavier_normal_(m.weight)
+                    logger.info('=> init {}.weight as normal(0, 0.001)'.format(name))
+                    logger.info('=> init {}.bias as 0'.format(name))
+                    nn.init.normal_(m.weight, std=0.001)
                     if self.deconv_with_bias:
                         nn.init.constant_(m.bias, 0)
                 elif isinstance(m, nn.BatchNorm2d):
+                    logger.info('=> init {}.weight as 1'.format(name))
+                    logger.info('=> init {}.bias as 0'.format(name))
                     nn.init.constant_(m.weight, 1)
                     nn.init.constant_(m.bias, 0)
+            logger.info('=> init final conv weights from normal distribution')
             for m in self.final_layer.modules():
-                if isinstance(m, nn.Linear):
-                    nn.init.xavier_normal_(m.weight)
+                if isinstance(m, nn.Conv2d):
+                    name = 'final_conv'
+                    # nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    logger.info('=> init {}.weight as normal(0, 0.001)'.format(name))
+                    logger.info('=> init {}.bias as 0'.format(name))
+                    nn.init.normal_(m.weight, std=0.001)
                     nn.init.constant_(m.bias, 0)
 
-            # init other weights from pretrained ResNet weights
-            self.load_state_dict(
-                model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth', progress=progress),
-                strict=False)
+            pretrained_state_dict = torch.load(pretrained)
+            logger.info('=> loading pretrained model {}'.format(pretrained))
+            self.load_state_dict(pretrained_state_dict, strict=False)
+            # checkpoint = torch.load(pretrained)
+            # if isinstance(checkpoint, OrderedDict):
+            #     state_dict = checkpoint
+            # elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            #     state_dict_old = checkpoint['state_dict']
+            #     state_dict = OrderedDict()
+            #     # delete 'module.' because it is saved from DataParallel module
+            #     for key in state_dict_old.keys():
+            #         if key.startswith('module.'):
+            #             # state_dict[key[7:]] = state_dict[key]
+            #             # state_dict.pop(key)
+            #             state_dict[key[7:]] = state_dict_old[key]
+            #         else:
+            #             state_dict[key] = state_dict_old[key]
+            # else:
+            #     raise RuntimeError(
+            #         'No state_dict found in checkpoint file {}'.format(pretrained))
+            # self.load_state_dict(state_dict, strict=False)
         else:
-
+            logger.info('=> init weights from normal distribution')
             for m in self.modules():
                 if isinstance(m, nn.Conv2d):
-                    nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity='relu')
-                elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                    nn.init.normal_(m.weight, std=0.001)
+                elif isinstance(m, nn.BatchNorm2d):
                     nn.init.constant_(m.weight, 1)
                     nn.init.constant_(m.bias, 0)
                 elif isinstance(m, nn.ConvTranspose2d):
-                    nn.init.normal_(m.weight, std=0.01)
+                    nn.init.normal_(m.weight, std=0.001)
                     if self.deconv_with_bias:
                         nn.init.constant_(m.bias, 0)
-                elif isinstance(m, nn.Linear):
-                    nn.init.normal_(m.weight, 0, std=0.01)
-                    nn.init.constant_(m.weight, 0)
-
 
 resnet_spec = {18: (BasicBlock, [2, 2, 2, 2]),
                34: (BasicBlock, [3, 4, 6, 3]),
@@ -305,14 +315,14 @@ resnet_spec = {18: (BasicBlock, [2, 2, 2, 2]),
                152: (Bottleneck, [3, 8, 36, 3])}
 
 
-def get_pose_net(is_train, **kwargs):
-    num_layers = 101
+def get_pose_net(cfg, is_train, **kwargs):
+    num_layers = cfg.MODEL.EXTRA.NUM_LAYERS
 
     block_class, layers = resnet_spec[num_layers]
 
-    model = PoseResNet(block_class, layers, **kwargs)
+    model = PoseResNet(block_class, layers, cfg, **kwargs)
 
-    if is_train:
-        model.init_weights()
+    if is_train and cfg.MODEL.INIT_WEIGHTS:
+        model.init_weights(cfg.MODEL.PRETRAINED)
 
     return model

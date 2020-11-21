@@ -12,8 +12,36 @@ class HeatmapLoss(nn.Module):
 
     def forward(self, pred, gt):
         l = ((pred - gt)**2)
-        l = l.mean(dim=3).mean(dim=2).mean(dim=1)
+        l = l.mean(dim=-1).mean(dim=-1).mean(dim=-1)
         return l ## l of dim bsize
+
+
+
+class HeatmapLossSquare(nn.Module):
+    """
+        loss for detection heatmap (stacked hourglass model)
+        not mse loss (use 'sum' instead of 'mean')
+        """
+
+    def __init__(self):
+        super(HeatmapLossSquare, self).__init__()
+
+    def forward(self, pred, gt):
+        l = ((pred - gt) ** 2)
+        l = l.sum(dim=-1).sum(dim=-1).sum(dim=-1)
+        return l  ## l of dim bsize
+
+
+class PoseLoss(nn.Module):
+    '''
+    MPJPE
+    '''
+    def __init__(self):
+        super(PoseLoss, self).__init__()
+    def forward(self, pred, gt):
+        l = (pred - gt) ** 2
+        l = torch.sqrt(torch.sum(l, dim=-1)).mean(-1)
+        return l  ## l of dim bsize
 
 
 class LimbLoss(nn.Module):
@@ -25,10 +53,10 @@ class LimbLoss(nn.Module):
     def forward(self, pred, gt):
         p, p_hat = self.getBones(pred, gt)  #(16, 14, 3)
         CosineSimilarity = nn.CosineSimilarity(dim=2)  # (16, 14)
-        theta = CosineSimilarity(p, p_hat).sum(dim=1)  # (16)
+        theta = CosineSimilarity(p, p_hat).sum(dim=-1)  # (16)
 
-        R = torch.norm(p-p_hat, dim=2) # (16, 14)
-        R = R.sum(dim=1)  # (16)
+        R = torch.norm(p-p_hat, dim=-1) # (16, 14)
+        R = R.sum(dim=-1)  # (16)
 
         return theta, R
 

@@ -13,7 +13,7 @@ heatmap_size = (int(config.data.heatmap_size[0]), int(config.data.heatmap_size[1
 # heatmap_size = (368, 368)
 
 
-def joint2heatmeap(p2d, sigma=2, heatmap_type='gaussian'):
+def joint2heatmap(p2d, sigma=2, heatmap_type='gaussian'):
     '''
     Args:
         joints: [num_joints, 3]
@@ -23,30 +23,29 @@ def joint2heatmeap(p2d, sigma=2, heatmap_type='gaussian'):
     Returns:
         visible(1: visible, 0: not visible)
 
+    *********** NOTE: this function will change the value of p2d **********
+
     '''
     num_joints = len(config.skel)
     visible = np.ones((num_joints, 1), dtype=np.float32)
 
     assert heatmap_type == 'gaussian', 'Only support gaussian map now!'
-
-    start = 240
-    p2d[:, 0] -= start  # x-axis
-    p2d[:, 0] /= (800 / heatmap_size[1])
-    p2d[:, 1] /= (800 / heatmap_size[0])
-    p2d = p2d.astype(np.int)
+    # p2d[:, 0] /= (368 / heatmap_size[1])
+    # p2d[:, 1] /= (368 / heatmap_size[0])
+    # p2d = p2d.astype(np.int)  # don't int here
 
 
     if heatmap_type == 'gaussian':
-        heatmaps = np.zeros((num_joints, heatmap_size[1], heatmap_size[0]), dtype=np.float32)
+        heatmaps = np.zeros((num_joints, heatmap_size[0], heatmap_size[1]), dtype=np.float32)
         tmp_size = sigma*3
 
 
         for joint in range(num_joints):
-            # feat_stride = config.data.image_size / config.data.heatmap_size
-            # mu_x = int(p2d[joint][0] / feat_stride[0] + 0.5)
-            # mu_y = int(p2d[joint][1] / feat_stride[1] + 0.5)
-            mu_x = p2d[joint][0]
-            mu_y = p2d[joint][1]
+            feat_stride = np.array(config.data.image_size) / np.array(config.data.heatmap_size)
+            mu_x = int(p2d[joint][0] / feat_stride[1] + 0.5)
+            mu_y = int(p2d[joint][1] / feat_stride[0] + 0.5)
+            # mu_x = int(p2d[joint][0])
+            # mu_y = int(p2d[joint][1])
 
             # Check that any part of the gaussian is in-bounds
             ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
@@ -91,7 +90,7 @@ if __name__ == "__main__":
     for jid, j in enumerate(config.skel.keys()):
         p2d[jid] = p2d_orig[joint_names[j]]
 
-    heatmaps, _ = joint2heatmeap(p2d)
+    heatmaps, _ = joint2heatmap(p2d)
     # TODO: change RGB to BGR
     img = sio.imread(img)
     start = int((img.shape[1] - img.shape[0]) / 2)
@@ -101,7 +100,6 @@ if __name__ == "__main__":
 
         img_fuse = 0.5*img[:,:,0] + heatmaps[i]*0.5
         img_fuse *= 255
-        # pdb.set_trace()
         cv2.imwrite(f"test_imgs/test_{i}.png", img_fuse)
 
         # cv2.imshow('t', img_fuse)

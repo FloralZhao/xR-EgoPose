@@ -12,13 +12,15 @@ from torchvision import transforms
 import torch.backends.cudnn as cudnn
 
 from base import SetType
+import yaml
+from easydict import EasyDict as edict
 import dataset.transform as trsf
 from dataset import Mocap
 from utils import config, ConsoleLogger
 from utils import evaluate, utils_io
 from utils import arguments
 import torch.optim as optim
-from model import pose_resnet, encoder_decoder
+from model import resnet as pose_resnet
 import itertools
 import torch.nn as nn
 from utils.loss import HeatmapLoss
@@ -64,18 +66,20 @@ def main():
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
-    val_data = Mocap(
-        config.dataset.val,
-        SetType.VAL,
+    test_data = Mocap(
+        config.dataset.test,
+        SetType.TEST,
         transform=data_transform)
-    val_data_loader = DataLoader(
-        val_data,
+    test_data_loader = DataLoader(
+        test_data,
         batch_size=2,
         shuffle=config.data_loader.shuffle,
         num_workers=8)
 
     # ------------------- Model -------------------
-    resnet = pose_resnet.get_pose_net(True)
+    with open('model/model.yaml') as fin:
+        model_cfg = edict(yaml.safe_load(fin))
+    resnet = pose_resnet.get_pose_net(model_cfg, True)
     Loss2D = HeatmapLoss()  # same as MSELoss()
     # LossMSE = nn.MSELoss()
 
@@ -159,7 +163,7 @@ def main():
                     writer.add_scalar('train_loss', losses.val, global_steps)
                     writer.add_scalar('batch_time', batch_time.val, global_steps)
                     image_grid = draw2Dpred_and_gt(img, heatmap2d_hat)
-                    writer.add_image('predicted heatmaps', image_grid, global_steps)
+                    writer.add_image('predicted_heatmaps', image_grid, global_steps)
                     writer_dict['train_global_steps'] = global_steps + 1
 
 
@@ -178,7 +182,7 @@ def main():
 
             # ------------------- validation -------------------
             resnet.eval()
-            val_loss = validate(LOGGER, val_data_loader, resnet, device, epoch)
+            val_loss = validate(LOGGER, test_data_loader, resnet, device, epoch)
             if val_loss < best_perf:
                 best_perf = val_loss
                 best_model = True
