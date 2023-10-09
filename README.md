@@ -1,7 +1,9 @@
 
 # *x*R-EgoPose Non-official Implementation
 
-This is a non-official implementation of the paper ["*x*R-EgoPose: Egocentric 3D Human Pose from an HMD Camera"](http://openaccess.thecvf.com/content_ICCV_2019/papers/Tome_xR-EgoPose_Egocentric_3D_Human_Pose_From_an_HMD_Camera_ICCV_2019_paper.pdf) (ICCV 2019, oral), based on their data loader and evaluation code [here](https://github.com/facebookresearch/xR-EgoPose)
+This is a non-official implementation of the paper ["*x*R-EgoPose: Egocentric 3D Human Pose from an HMD Camera"](http://openaccess.thecvf.com/content_ICCV_2019/papers/Tome_xR-EgoPose_Egocentric_3D_Human_Pose_From_an_HMD_Camera_ICCV_2019_paper.pdf) (ICCV 2019, oral), based on their data loader and evaluation code [here](https://github.com/facebookresearch/xR-EgoPose).
+
+The code of pose_resnet is adapted from this [repo](https://github.com/microsoft/human-pose-estimation.pytorch).
 
 Please refer to their repository for downloading the dataset and license agreement.
 
