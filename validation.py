@@ -1,11 +1,3 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-# -*- coding: utf-8 -*-
-"""
-Demo code
-
-@author: Denis Tome'
-
-"""
 from base import SetType
 import dataset.transform as trsf
 from dataset import Mocap
